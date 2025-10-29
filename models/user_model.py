@@ -1,12 +1,20 @@
-# models/user_model.py
 from datetime import datetime
+from pydantic import BaseModel, EmailStr
 from bson import ObjectId
 
+class User(BaseModel):
+    id: str | None = None
+    email: EmailStr
+    username: str | None = None
+    password: str | None = None
+    role: str = "user"
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    class Config:
+        orm_mode = True
+
 def create_user(email: str, username: str, password_hash: str, role: str = "user"):
-    """
-    创建一个新的用户文档，准备插入 MongoDB。
-    role 字段：'admin' 或 'user'（默认）
-    """
     if role not in ["admin", "user"]:
         raise ValueError("Invalid role: must be 'admin' or 'user'")
 
@@ -22,14 +30,11 @@ def create_user(email: str, username: str, password_hash: str, role: str = "user
 
 
 def serialize_user(user_doc):
-    """
-    将 MongoDB 返回的用户文档转换为可返回给前端的 JSON 格式。
-    """
-    return {
-        "id": str(user_doc["_id"]),
-        "email": user_doc["email"],
-        "username": user_doc["username"],
-        "role": user_doc.get("role", "user"),
-        "created_at": user_doc.get("created_at"),
-        "updated_at": user_doc.get("updated_at")
-    }
+    return User(
+        id=str(user_doc["_id"]),
+        email=user_doc["email"],
+        username=user_doc["username"],
+        role=user_doc.get("role", "user"),
+        created_at=user_doc.get("created_at"),
+        updated_at=user_doc.get("updated_at")
+    )

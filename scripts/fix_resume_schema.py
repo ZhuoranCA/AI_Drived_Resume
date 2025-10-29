@@ -2,17 +2,15 @@
 from pymongo import MongoClient
 from datetime import datetime
 
-# === 1. Connect to MongoDB ===
 try:
     client = MongoClient("mongodb://localhost:27017/")
-    resume_db = client["resume_db"]  # 👈 请改成你实际的数据库名
+    resume_db = client["resume_db"]
     resumes = resume_db["resumes"]
-    print("✅ Connected to MongoDB: resume_ai_db")
+    print("Connected to MongoDB: resume_ai_db")
 except Exception as e:
-    print("❌ MongoDB connection failed:", e)
+    print("MongoDB connection failed:", e)
     exit(1)
 
-# === 2. Define migration logic ===
 def migrate_resume_documents():
     """
     Update all resume documents to match the new schema.
@@ -20,7 +18,7 @@ def migrate_resume_documents():
     """
     updated_count = 0
     total_docs = resumes.count_documents({})
-    print(f"🔍 Found {total_docs} resume documents.")
+    print(f"Found {total_docs} resume documents.")
 
     for doc in resumes.find({}):
         update_fields = {}
@@ -49,11 +47,10 @@ def migrate_resume_documents():
             resumes.update_one({"_id": doc["_id"]}, {"$set": update_fields})
             updated_count += 1
 
-    print(f"✅ Migration complete. Updated {updated_count} documents.")
+    print(f"Migration complete. Updated {updated_count} documents.")
     return updated_count
 
-# === 3. Run migration ===
 if __name__ == "__main__":
     migrate_resume_documents()
     client.close()
-    print("🔒 MongoDB connection closed.")
+    print("MongoDB connection closed.")

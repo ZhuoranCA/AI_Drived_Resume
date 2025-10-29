@@ -1,42 +1,16 @@
-# routes/user_routes.py
-
 from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel, EmailStr
 from passlib.hash import bcrypt
 from bson import ObjectId
+from datetime import datetime
+
 from database.db_connection import user_db
-from models.user_model import create_user
+from models.user_model import User, create_user, serialize_user
 from utils.auth_handler import create_access_token, get_current_user, require_role
 
 router = APIRouter(prefix="", tags=["Users"])
 
-# -----------------------------
-# Pydantic Schemas
-# -----------------------------
-class UserRegister(BaseModel):
-    username: str
-    email: EmailStr
-    password: str
-    role: str = "user"  # default: normal user
-
-
-class UserLogin(BaseModel):
-    email: EmailStr
-    password: str
-
-
-class UserUpdate(BaseModel):
-    username: str | None = None
-    password: str | None = None
-
-
-# -----------------------------
-# Routes
-# -----------------------------
-
-@router.post("/register")
-def register_user(user: UserRegister):
-    """Register new user"""
+@router.post("/register", response_model=User)
+def register_user(user: User):
     if user_db is None:
         raise HTTPException(status_code=500, detail="Database not initialized.")
 
@@ -45,20 +19,24 @@ def register_user(user: UserRegister):
     if users_col.find_one({"email": user.email}):
         raise HTTPException(status_code=400, detail="Email already registered.")
 
+    if not user.password:
+        raise HTTPException(status_code=400, detail="Password is required.")
+
     hashed_pw = bcrypt.hash(user.password[:72])
     new_user = create_user(email=user.email, username=user.username, password_hash=hashed_pw)
     new_user["role"] = user.role
 
     result = users_col.insert_one(new_user)
-    return {"message": "User registered successfully.", "user_id": str(result.inserted_id)}
+    inserted = users_col.find_one({"_id": result.inserted_id})
+    return serialize_user(inserted)
 
 
 @router.post("/login")
-def login_user(user: UserLogin):
-    """Login user and return JWT token"""
+def login_user(user: User):
     users_col = user_db["users"]
     found = users_col.find_one({"email": user.email})
-    if not found or not bcrypt.verify(user.password, found["password_hash"]):
+
+    if not found or not user.password or not bcrypt.verify(user.password, found["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid email or password.")
 
     token = create_access_token({
@@ -70,9 +48,9 @@ def login_user(user: UserLogin):
     return {"access_token": token, "token_type": "bearer"}
 
 
-@router.get("/", dependencies=[Depends(require_role("admin"))])
+# @router.get("/", dependencies=[Depends(require_role("admin"))])
+@router.get("/")
 def get_all_users():
-    """Admin only: Get all users"""
     users_col = user_db["users"]
     users = list(users_col.find({}, {"password_hash": 0}))
     for u in users:
@@ -80,25 +58,21 @@ def get_all_users():
     return users
 
 
-@router.get("/{user_id}")
+@router.get("/{user_id}", response_model=User)
 def get_user(user_id: str, current_user: dict = Depends(get_current_user)):
-    """Get user details (self or admin)"""
     users_col = user_db["users"]
     user = users_col.find_one({"_id": ObjectId(user_id)}, {"password_hash": 0})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # only self or admin can view
     if str(current_user["user_id"]) != user_id and current_user["role"] != "admin":
         raise HTTPException(status_code=403, detail="Access denied.")
 
-    user["_id"] = str(user["_id"])
-    return user
+    return serialize_user(user)
 
 
 @router.put("/{user_id}")
-def update_user(user_id: str, update: UserUpdate, current_user: dict = Depends(get_current_user)):
-    """Update username/password (self or admin)"""
+def update_user(user_id: str, update: User, current_user: dict = Depends(get_current_user)):
     users_col = user_db["users"]
     user = users_col.find_one({"_id": ObjectId(user_id)})
     if not user:
@@ -112,14 +86,18 @@ def update_user(user_id: str, update: UserUpdate, current_user: dict = Depends(g
         update_fields["username"] = update.username
     if update.password:
         update_fields["password_hash"] = bcrypt.hash(update.password[:72])
+    if update_fields:
+        update_fields["updated_at"] = datetime.utcnow()
 
-    users_col.update_one({"_id": ObjectId(user_id)}, {"$set": update_fields})
+    result = users_col.update_one({"_id": ObjectId(user_id)}, {"$set": update_fields})
+    if result.modified_count == 0:
+        raise HTTPException(status_code=400, detail="No changes made.")
+
     return {"message": "User updated successfully."}
 
 
-@router.delete("/{user_id}", dependencies=[Depends(require_role("admin"))])
+@router.delete("/{user_id}")
 def delete_user(user_id: str):
-    """Admin only: Delete user"""
     users_col = user_db["users"]
     result = users_col.delete_one({"_id": ObjectId(user_id)})
     if result.deleted_count == 0:

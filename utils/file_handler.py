@@ -14,7 +14,6 @@ def save_upload_file(upload_file: UploadFile) -> str:
 
     file_path = os.path.join(UPLOAD_DIR, upload_file.filename)
 
-    # 重要：先读取文件内容后写入（UploadFile.file 是一个 SpooledTemporaryFile）
     with open(file_path, "wb") as buffer:
         buffer.write(upload_file.file.read())
 

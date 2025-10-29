@@ -24,3 +24,7 @@ uploads/
 # Byte-compiled
 *.pyo
 *.pyd
+
+# Ignore temporary fix scripts
+scripts/fix_resume_schema.py
+scripts/fix_user_role.py
