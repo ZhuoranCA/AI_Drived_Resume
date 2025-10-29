@@ -11,6 +11,7 @@ except Exception as e:
     print("MongoDB connection failed:", e)
     exit(1)
 
+
 def migrate_resume_documents():
     """
     Update all resume documents to match the new schema.
@@ -49,6 +50,7 @@ def migrate_resume_documents():
 
     print(f"Migration complete. Updated {updated_count} documents.")
     return updated_count
+
 
 if __name__ == "__main__":
     migrate_resume_documents()

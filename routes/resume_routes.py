@@ -46,10 +46,16 @@ def get_all_resumes():
     return [serialize_resume(r) for r in resumes]
 
 
-@router.get("/my", response_model=list[Resume])
-def get_my_resumes(current_user: dict = Depends(get_current_user)):
+@router.get("/user/{user_id}", response_model=list[Resume])
+def get_user_resumes(user_id: str):
+    """
+    Return all resumes that belong to a specific user.
+    Example: GET /api/resumes/user/bochao
+    """
     resumes_col = resume_db["resumes"]
-    resumes = list(resumes_col.find({"user_id": current_user["user_id"]}))
+    resumes = list(resumes_col.find({"user_id": user_id}))
+    if not resumes:
+        raise HTTPException(status_code=404, detail="No resumes found for this user")
     return [serialize_resume(r) for r in resumes]
 
 

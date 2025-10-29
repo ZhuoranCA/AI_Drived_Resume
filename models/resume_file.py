@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class ResumeFile(BaseModel):
@@ -8,8 +8,9 @@ class ResumeFile(BaseModel):
     file_url: str = Field(..., description="Public Azure Blob URL for the stored resume PDF.")
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra={
             "example": {
                 "file_id": "resume_20251101_001",
                 "user_id": "bochao",
@@ -17,3 +18,4 @@ class ResumeFile(BaseModel):
                 "created_at": "2025-11-01T15:20:00Z"
             }
         }
+    )
