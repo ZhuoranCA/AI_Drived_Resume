@@ -6,8 +6,6 @@ __pycache__/
 venv/
 env/
 
-# Environment variables
-.env
 
 # OS files
 .DS_Store
