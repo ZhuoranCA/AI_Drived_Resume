@@ -8,6 +8,7 @@ try:
     user_db = client[USER_DB]
     resume_db = client[RESUME_DB]
     resume_ai_db = client[AI_DB]
+    chat_db = mongo_client["chat_db"] if mongo_client else None
 
     parsed = urlparse(MONGO_URI)
     host_info = parsed.hostname or "Unknown host"
