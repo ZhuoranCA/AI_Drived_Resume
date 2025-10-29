@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 from typing import Optional
 from bson import ObjectId
 
+
 class Resume(BaseModel):
     id: str | None = None
     user_id: str
@@ -17,13 +18,14 @@ class Resume(BaseModel):
     class Config:
         orm_mode = True
 
+
 def create_resume(
-    user_id: str,
-    filename: str,
-    content: str,
-    job_link: str = None,
-    previous_content: str = None,
-    source: str = "user"
+        user_id: str,
+        filename: str,
+        content: str,
+        job_link: str = None,
+        previous_content: str = None,
+        source: str = "user"
 ):
     if source not in ["user", "ai"]:
         raise ValueError("Invalid source: must be 'user' or 'ai'")
