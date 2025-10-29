@@ -2,6 +2,7 @@ from datetime import datetime
 from pydantic import BaseModel, EmailStr
 from bson import ObjectId
 
+
 class User(BaseModel):
     id: str | None = None
     email: EmailStr
@@ -13,6 +14,7 @@ class User(BaseModel):
 
     class Config:
         orm_mode = True
+
 
 def create_user(email: str, username: str, password_hash: str, role: str = "user"):
     if role not in ["admin", "user"]:

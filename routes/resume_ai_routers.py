@@ -7,6 +7,7 @@ from ai.resume_ai import define_graph
 from database.db_connection import chat_db
 from models.history_session import ChatMessage, HistorySession
 from dotenv import load_dotenv
+import re
 
 load_dotenv()
 
@@ -52,6 +53,9 @@ def chat(msg: Message):
     result = compiled.invoke(state)
     reply = result.get("response", "No response generated.")
 
+    raw_resume_md = result.get("resume_md", session.get("resume_md", ""))
+    cleaned_resume_md = re.sub(r"^```(?:markdown)?\s*|\s*```$", "", raw_resume_md.strip(), flags=re.MULTILINE)
+
     user_msg = ChatMessage(role="user", content=text)
     ai_msg = ChatMessage(role="assistant", content=reply)
 
@@ -60,7 +64,7 @@ def chat(msg: Message):
         {
             "$push": {"messages": {"$each": [user_msg.dict(), ai_msg.dict()]}},
             "$set": {
-                "resume_md": result.get("resume_md", session.get("resume_md", "")),
+                "resume_md": cleaned_resume_md,
                 "jd_md": result.get("jd_md", session.get("jd_md", "")),
                 "goal": result.get("goal", session.get("goal", "")),
                 "final_resume": result.get("final_resume", session.get("final_resume", "")),
@@ -69,11 +73,15 @@ def chat(msg: Message):
         }
     )
 
-    return {"reply": reply}
+    return {
+        "reply": reply,
+        "resume_md": cleaned_resume_md
+    }
 
 
 @router.get("/history/{user_id}/{session_id}")
 def get_chat_history(user_id: str, session_id: str):
+    """Return the full conversation history for a session."""
     session = sessions_collection.find_one({"user_id": user_id, "session_id": session_id})
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -85,4 +93,5 @@ def get_chat_history(user_id: str, session_id: str):
 
 @router.get("/health")
 def health():
+    """Health check endpoint."""
     return {"status": "ok"}
