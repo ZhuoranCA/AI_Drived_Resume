@@ -2,6 +2,7 @@ from typing import TypedDict, Optional
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, END
 from langchain_core.messages import HumanMessage
+import re
 
 
 class ResumeState(TypedDict):
@@ -19,86 +20,91 @@ def define_graph() -> StateGraph:
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.6)
 
     def ai_speak(context: str, tone: str = "professional") -> str:
-        """Generate natural assistant messages."""
+        """Generate human-like, contextual messages."""
         guidance_prompt = f"""
 You are a conversational AI resume assistant speaking in a {tone} and natural tone.
 You help users refine resumes professionally and politely.
-Generate a short, human-like response (1–3 sentences) to guide the user.
+Generate a short, natural response (1–3 sentences) to guide the user.
 
 Context:
 {context}
 """
         return llm.invoke([HumanMessage(content=guidance_prompt)]).content.strip()
 
+    def is_markdown_like(text: str) -> bool:
+        """Check if the text is formatted like Markdown."""
+        return bool(re.search(r"(\#|\*\*|[-*]\s|\n\d+\.)", text)) and len(text.split()) > 30
+
+    def looks_like_resume(text: str) -> bool:
+        keywords = ["experience", "education", "intern", "engineer", "project", "skills"]
+        return any(k.lower() in text.lower() for k in keywords)
+
+    def looks_like_jd(text: str) -> bool:
+        jd_keywords = ["responsibilities", "requirements", "position", "we are looking for", "team"]
+        return any(k.lower() in text.lower() for k in jd_keywords)
+
     def handle_input(state: ResumeState) -> ResumeState:
-        """Classify user input and determine what to do next."""
-        user_input = (state.get("user_message") or "").strip()
+        """Classify and process the user input."""
+        user_input = (state.get("user_message") or "").strip().lower()
         resume = state.get("resume_md")
         jd = state.get("jd_md")
-        goal = state.get("goal")
+        final_resume = state.get("final_resume")
 
-        # === 1️⃣ 自动识别 resume+JD 齐全 ===
-        if resume and jd and not user_input:
-            msg = ai_speak("Both resume and job description are present. Proceeding directly to optimization.")
-            return {"response": msg, "next": "rewrite"}
+        # === Handle end condition ===
+        if user_input in ["done", "finish", "end"]:
+            msg = ai_speak("Great! The resume optimization process is complete. Wishing you success in your job search!")
+            return {"response": msg, "next": None}
 
-        # === 2️⃣ 分类输入 ===
-        classification_prompt = f"""
-You are an input classifier for a resume optimization assistant.
-Classify this input into one of: Resume, JD, Goal, Optimize, Other.
+        # === Continue refining ===
+        if final_resume and not any(keyword in user_input for keyword in ["resume", "jd", "goal", "optimize"]):
+            msg = ai_speak("Got it. Refining your current resume according to your new instructions...")
+            return {"response": msg, "next": "refine"}
 
-Input:
-{user_input}
-
-Output exactly one label.
-"""
-        if not user_input:
-            msg = ai_speak("Waiting for user input, please provide either your resume or job description.",
-                           tone="welcoming")
-            return {"response": msg}
-
-        classification = llm.invoke([HumanMessage(content=classification_prompt)]).content.strip().lower()
-
-        # === 3️⃣ 根据分类处理 ===
-        if "resume" in classification:
-            msg = ai_speak("Resume received. Please provide the job description next.")
-            return {"resume_md": user_input, "response": msg}
-
-        elif "jd" in classification:
-            msg = ai_speak("Job description received. You can now type 'optimize' to begin alignment.")
-            return {"jd_md": user_input, "response": msg}
-
-        elif "goal" in classification:
-            msg = ai_speak("Goal noted. It will be used to guide optimization.")
-            return {"goal": user_input, "response": msg}
-
-        elif "optimize" in classification:
-            if not resume and not jd:
-                msg = ai_speak("You haven't provided a resume or JD yet. Please upload both to start.")
-                return {"response": msg}
-            elif not resume:
-                msg = ai_speak("Please upload your resume before optimization.")
-                return {"response": msg}
-            elif not jd:
-                msg = ai_speak("Please provide a job description before optimization.")
+        # === Optimization trigger ===
+        if user_input == "optimize" or "optimize" in user_input:
+            if not (resume and jd):
+                msg = ai_speak("You need to provide both a resume and a job description before optimizing.")
                 return {"response": msg}
             msg = ai_speak("Optimization starting now.")
             return {"response": msg, "next": "rewrite"}
 
+        # === Classification for new data ===
+        classification_prompt = f"""
+You are an input classifier for a resume optimization assistant.
+Classify this input into one of: Resume, JD, Goal, Other.
+
+Input:
+{user_input}
+"""
+        classification = llm.invoke([HumanMessage(content=classification_prompt)]).content.strip().lower()
+
+        if "resume" in classification:
+            if not is_markdown_like(user_input):
+                msg = ai_speak("The resume doesn’t appear to be in Markdown format. Please reformat it properly.")
+                return {"response": msg}
+            if not looks_like_resume(user_input):
+                msg = ai_speak("The text doesn’t look like a resume. Please include sections such as Experience and Education.")
+                return {"response": msg}
+            msg = ai_speak("Resume received. Please provide the job description next.")
+            return {"resume_md": user_input, "response": msg}
+
+        elif "jd" in classification:
+            if not looks_like_jd(user_input):
+                msg = ai_speak("The job description seems incomplete. Please paste the full version including Responsibilities and Requirements.")
+                return {"response": msg}
+            msg = ai_speak("Job description received. You can now type 'optimize' to begin alignment.")
+            return {"jd_md": user_input, "response": msg}
+
         else:
-            msg = ai_speak("I'm not sure what that means — please share your resume or JD.")
+            msg = ai_speak("I didn’t quite understand that. You can provide a resume, job description, or ask for optimization.")
             return {"response": msg}
 
     def rewrite_resume(state: ResumeState) -> ResumeState:
-        """Optimize resume based on JD and goal."""
-        if not (state.get("resume_md") and state.get("jd_md")):
-            msg = ai_speak("Optimization requested but missing information.")
-            return {"response": msg}
-
+        """Generate the first optimized resume."""
         prompt = f"""
 You are a professional resume optimization assistant.
 
-Revise the following resume to align with the given job description.
+Revise the following resume to align with the job description.
 
 ### Resume
 {state['resume_md']}
@@ -106,16 +112,16 @@ Revise the following resume to align with the given job description.
 ### Job Description
 {state['jd_md']}
 
-### Optimization Goal
-{state.get('goal', 'Align with job description requirements for best match.')}
+### Goal
+{state.get('goal', 'Align the resume with the job description for maximum relevance.')}
 
 Rules:
 - Output only the optimized resume in Markdown.
-- Keep the tone professional.
-- Emphasize relevant skills and achievements matching the JD.
+- Preserve key experience.
+- Highlight relevant skills and results.
 """
         optimized = llm.invoke([HumanMessage(content=prompt)]).content.strip()
-        summary = ai_speak("Optimization completed. Here is the refined version of the resume:")
+        summary = ai_speak("Here’s your optimized resume. You can ask me to adjust it further (e.g., emphasize Azure, shorten Experience, etc.).")
 
         return {
             "final_resume": optimized,
@@ -123,17 +129,45 @@ Rules:
             "response": summary + "\n\n" + optimized
         }
 
+    def refine_resume(state: ResumeState) -> ResumeState:
+        """Refine existing optimized resume based on user feedback."""
+        prompt = f"""
+You are a resume refinement assistant.
+
+The current optimized resume is:
+{state['final_resume']}
+
+User's latest instruction:
+{state['user_message']}
+
+Revise the resume accordingly. Maintain Markdown format and professionalism.
+Output only the full updated resume in Markdown.
+"""
+        refined = llm.invoke([HumanMessage(content=prompt)]).content.strip()
+        summary = ai_speak("I've refined your resume based on your feedback. You can continue adjusting until you're "
+                           "satisfied.")
+
+        return {
+            "final_resume": refined,
+            "resume_md": refined,
+            "response": summary + "\n\n" + refined
+        }
+
+    # === Graph definition ===
     graph.add_node("handle_input", handle_input)
     graph.add_node("rewrite_resume", rewrite_resume)
+    graph.add_node("refine_resume", refine_resume)
 
     graph.add_conditional_edges(
         "handle_input",
-        lambda s: "rewrite_resume" if s.get("next") == "rewrite" else END,
-        {"rewrite_resume": "rewrite_resume", END: END},
+        lambda s: "rewrite_resume" if s.get("next") == "rewrite"
+        else "refine_resume" if s.get("next") == "refine"
+        else END,
+        {"rewrite_resume": "rewrite_resume", "refine_resume": "refine_resume", END: END},
     )
 
     graph.add_edge("rewrite_resume", END)
+    graph.add_edge("refine_resume", END)
     graph.set_entry_point("handle_input")
 
-    # ✅ 7️⃣ 最关键：返回 graph
     return graph
