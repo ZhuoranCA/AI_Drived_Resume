@@ -2,6 +2,7 @@
 from datetime import datetime
 from bson import ObjectId
 
+
 def create_user(email: str, username: str, password_hash: str, role: str = "user"):
     """
     创建一个新的用户文档，准备插入 MongoDB。

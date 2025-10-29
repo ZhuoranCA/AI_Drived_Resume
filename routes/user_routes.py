@@ -10,6 +10,7 @@ from utils.auth_handler import create_access_token, get_current_user, require_ro
 
 router = APIRouter(prefix="", tags=["Users"])
 
+
 # -----------------------------
 # Pydantic Schemas
 # -----------------------------
@@ -125,3 +126,15 @@ def delete_user(user_id: str):
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="User not found.")
     return {"message": "User deleted successfully."}
+
+
+@router.get("/{user_id}/resumes")
+def get_user_resumes(user_id: str, current_user: dict = Depends(get_current_user)):
+    if user_id != current_user["user_id"]:
+        raise HTTPException(status_code=403, detail="Not authorized to view other users' resumes")
+
+    resumes_col = resume_db["resumes"]
+    resumes = list(resumes_col.find({"user_id": user_id}))
+    for r in resumes:
+        r["_id"] = str(r["_id"])
+    return resumes
