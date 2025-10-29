@@ -9,6 +9,7 @@ from utils.auth_handler import create_access_token, get_current_user, require_ro
 
 router = APIRouter(prefix="", tags=["Users"])
 
+
 @router.post("/register", response_model=User)
 def register_user(user: User):
     if user_db is None:
