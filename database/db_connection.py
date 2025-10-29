@@ -1,5 +1,5 @@
 from pymongo import MongoClient
-from config.config import MONGO_URI, USER_DB, RESUME_DB, AI_DB
+from config.config import MONGO_URI, USER_DB, RESUME_DB, AI_DB, CHAT_DB
 from urllib.parse import urlparse
 
 try:
@@ -8,7 +8,7 @@ try:
     user_db = client[USER_DB]
     resume_db = client[RESUME_DB]
     resume_ai_db = client[AI_DB]
-    chat_db = mongo_client["chat_db"] if mongo_client else None
+    chat_db = client[CHAT_DB]
 
     parsed = urlparse(MONGO_URI)
     host_info = parsed.hostname or "Unknown host"
