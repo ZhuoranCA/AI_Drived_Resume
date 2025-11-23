@@ -3,6 +3,7 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, END
 from langchain_core.messages import HumanMessage
 import re
+from playwright.sync_api import sync_playwright
 
 
 class ResumeState(TypedDict):
@@ -15,128 +16,164 @@ class ResumeState(TypedDict):
     next: Optional[str]
 
 
+# === Sync JD Extractor using Playwright ===
+def fetch_jd_from_url(url: str) -> str:
+    """Fetch raw webpage text using Playwright."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+
+        try:
+            page.goto(url, timeout=30000)
+            page.wait_for_timeout(2000)
+            text = page.inner_text("body")
+        except Exception:
+            text = ""
+
+        browser.close()
+        return text
+
+
 def define_graph() -> StateGraph:
     graph = StateGraph(state_schema=ResumeState)
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.6)
 
-    # === Helper: conversational AI reply ===
+    # === Helper: Conversational Reply ===
     def ai_speak(context: str, tone: str = "professional") -> str:
-        guidance_prompt = f"""
-You are a conversational AI resume assistant speaking in a {tone} and natural tone.
-You help users refine resumes professionally and politely.
-Generate a short, natural response (1–3 sentences) to guide the user.
+        prompt = f"""
+You are a conversational AI resume assistant speaking in a {tone} tone.
+Provide a short (1–3 sentence) natural reply.
 
 Context:
 {context}
 """
-        return llm.invoke([HumanMessage(content=guidance_prompt)]).content.strip()
+        return llm.invoke([HumanMessage(content=prompt)]).content.strip()
 
-    # === Helper: AI extraction of Markdown resume ===
+    # === Helper: Extract ONLY resume Markdown ===
     def extract_resume_md(raw_text: str) -> str:
-        """Extract ONLY the Markdown resume section from user input."""
-        extract_prompt = f"""
-You are an assistant that extracts ONLY the Markdown resume content from user input.
+        prompt = f"""
+Extract ONLY the Markdown resume from the text strictly.
 
 Rules:
-- Output ONLY the Markdown resume content, exactly as written.
-- Do NOT rewrite, modify, summarize, fix, or correct.
-- Preserve original formatting, spacing, indentation, and capitalization.
-- If multiple sections exist, return only the resume.
-- If no valid resume is found, return an empty string.
+- Do NOT modify content
+- Do NOT fix formatting
+- Return only the resume section
 
-User Input:
+Input:
 {raw_text}
 """
-        result = llm.invoke([HumanMessage(content=extract_prompt)]).content.strip()
-        return result
+        return llm.invoke([HumanMessage(content=prompt)]).content.strip()
 
-    # === Basic validators ===
-    def is_markdown_like(text: str) -> bool:
-        return bool(re.search(r"(\#|\*\*|[-*]\s|\n\d+\.)", text)) and len(text.split()) > 30
-
+    # Validators
     def looks_like_resume(text: str) -> bool:
-        keywords = ["experience", "education", "intern", "engineer", "project", "skills"]
-        return any(k.lower() in text.lower() for k in keywords)
+        keywords = ["experience", "education", "project", "skills", "engineer", "intern"]
+        return any(k in text.lower() for k in keywords)
 
     def looks_like_jd(text: str) -> bool:
-        jd_keywords = ["responsibilities", "requirements", "position", "we are looking for", "team"]
-        return any(k.lower() in text.lower() for k in jd_keywords)
+        jd_keywords = ["responsibilities", "requirements", "team", "position"]
+        return any(k in text.lower() for k in jd_keywords)
 
-    # === Main input handler ===
+    # === Main Input Handler ===
     def handle_input(state: ResumeState) -> ResumeState:
-        # Keep original raw text (don’t lowercase)
         user_input_raw = state.get("user_message") or ""
-        # Only use lowercase for classification
-        user_input_lc = user_input_raw.lower()
-
         resume = state.get("resume_md")
         jd = state.get("jd_md")
         final_resume = state.get("final_resume")
 
-        # === End process ===
+        # === 1) Extract URL from arbitrary input ===
+        url_pattern = r"(https?://[^\s]+)"
+        match = re.search(url_pattern, user_input_raw)
+        if match:
+            real_url = match.group(0)
+
+            # Step 1: Crawl webpage
+            raw_text = fetch_jd_from_url(real_url)
+
+            # Step 2: AI clean the JD
+            clean_prompt = f"""
+Extract ONLY the job description (cleaned) from the following webpage text.
+
+Include:
+- Job Title
+- Responsibilities
+- Requirements
+- Skills
+- Qualifications
+
+Remove:
+- Ads, navigation bars, cookie notices,
+- Footer text, sidebars, salary widgets, FAQs
+
+Output in clean Markdown.
+
+Webpage text:
+{raw_text}
+"""
+            jd_clean = llm.invoke([HumanMessage(content=clean_prompt)]).content.strip()
+
+            if not jd_clean or len(jd_clean.split()) < 30:
+                return {"response": ai_speak("I visited the link but couldn't extract a valid job description.")}
+
+            return {
+                "jd_md": jd_clean,
+                "response": ai_speak("Job description successfully extracted! Type 'optimize' when you're ready.")
+            }
+
+        # === End ===
+        user_input_lc = user_input_raw.lower()
         if user_input_lc in ["done", "finish", "end"]:
-            msg = ai_speak("Great! The resume optimization process is complete. Wishing you success!")
-            return {"response": msg, "next": None}
+            return {"response": ai_speak("The resume optimization process is complete."), "next": None}
 
-        # === Refinement path ===
+        # === Refinement ===
         if final_resume and not any(k in user_input_lc for k in ["resume", "jd", "goal", "optimize"]):
-            msg = ai_speak("Got it. Refining your current resume according to your new instructions...")
-            return {"response": msg, "next": "refine"}
+            return {"response": ai_speak("Understood. Refining your resume..."), "next": "refine"}
 
-        # === Optimization trigger ===
+        # === Optimization Start ===
         if "optimize" in user_input_lc:
             if not (resume and jd):
-                msg = ai_speak("You need to provide both a resume and a job description before optimizing.")
-                return {"response": msg}
-            msg = ai_speak("Optimization starting now.")
-            return {"response": msg, "next": "rewrite"}
+                return {"response": ai_speak("Please provide both a resume and a job description first.")}
+            return {"response": ai_speak("Optimization starting..."), "next": "rewrite"}
 
         # === Classification ===
-        classification_prompt = f"""
-You are an input classifier for a resume optimization assistant.
-Classify this input into one of: Resume, JD, Goal, Other.
+        class_prompt = f"""
+Classify the input into: Resume, JD, Goal, Other.
 
 Input:
 {user_input_raw}
 """
-        classification = llm.invoke([HumanMessage(content=classification_prompt)]).content.strip().lower()
+        cls = llm.invoke([HumanMessage(content=class_prompt)]).content.strip().lower()
 
-        # === Resume input ===
-        if "resume" in classification:
+        # === Resume Input ===
+        if "resume" in cls:
             if not looks_like_resume(user_input_raw):
-                msg = ai_speak("The text doesn’t look like a resume. Please include sections such as Experience and Education.")
-                return {"response": msg}
+                return {"response": ai_speak("This doesn't look like a resume. Please include Experience or Education.")}
 
-            # Extract only the resume part via GPT
             extracted = extract_resume_md(user_input_raw)
-
             if not extracted or len(extracted) < 20:
-                msg = ai_speak("I couldn't detect a valid Markdown resume in your input. Please paste it again.")
-                return {"response": msg}
+                return {"response": ai_speak("I couldn't detect a Markdown resume. Please paste it again.")}
 
-            # Save resume exactly, no modifications
-            msg = ai_speak("Resume received. Please provide the job description next.")
-            return {"resume_md": extracted, "response": msg}
+            return {
+                "resume_md": extracted,
+                "response": ai_speak("Resume received! Now please provide the job description.")
+            }
 
-        # === Job description input ===
-        elif "jd" in classification:
+        # === JD Input ===
+        if "jd" in cls:
             if not looks_like_jd(user_input_raw):
-                msg = ai_speak("The job description seems incomplete. Please paste the full Responsibilities and Requirements section.")
-                return {"response": msg}
-            msg = ai_speak("Job description received. You can now type 'optimize' to begin alignment.")
-            return {"jd_md": user_input_raw, "response": msg}
+                return {"response": ai_speak("This job description seems incomplete. Please add Responsibilities or Requirements.")}
 
-        # === Other ===
-        else:
-            msg = ai_speak("I didn't quite understand that. You can provide a resume, job description, or ask for optimization.")
-            return {"response": msg}
+            return {
+                "jd_md": user_input_raw,
+                "response": ai_speak("Job description received! Type 'optimize' to proceed.")
+            }
 
-    # === Optimizer ===
+        # === Otherwise ===
+        return {"response": ai_speak("I didn’t quite understand. You can provide a resume or a job description.")}
+
+    # === Rewrite Resume ===
     def rewrite_resume(state: ResumeState) -> ResumeState:
         prompt = f"""
-You are a professional resume optimization assistant.
-
-Revise the following resume to align with the job description.
+Optimize the following resume based on the job description.
 
 ### Resume
 {state['resume_md']}
@@ -144,16 +181,11 @@ Revise the following resume to align with the job description.
 ### Job Description
 {state['jd_md']}
 
-### Goal
-{state.get('goal', 'Align the resume with the job description for maximum relevance.')}
-
-Rules:
-- Output only the optimized resume in Markdown.
-- Preserve key experience.
-- Highlight relevant skills and results.
+Output ONLY the improved resume in Markdown.
 """
         optimized = llm.invoke([HumanMessage(content=prompt)]).content.strip()
-        summary = ai_speak("Here’s your optimized resume. You can ask me to adjust it further.")
+        summary = ai_speak("Here is your optimized resume.")
+
         return {
             "final_resume": optimized,
             "resume_md": optimized,
@@ -163,26 +195,26 @@ Rules:
     # === Refinement ===
     def refine_resume(state: ResumeState) -> ResumeState:
         prompt = f"""
-You are a resume refinement assistant.
+Refine the following resume based on the user’s new instructions.
 
-The current optimized resume is:
+### Resume
 {state['final_resume']}
 
-User's latest instruction:
+### Instruction
 {state['user_message']}
 
-Revise the resume accordingly. Maintain Markdown format.
-Output only the full updated resume in Markdown.
+Output ONLY the revised resume in Markdown.
 """
         refined = llm.invoke([HumanMessage(content=prompt)]).content.strip()
-        summary = ai_speak("I've refined your resume based on your feedback.")
+        summary = ai_speak("Your resume has been updated.")
+
         return {
             "final_resume": refined,
             "resume_md": refined,
             "response": summary + "\n\n" + refined
         }
 
-    # === Graph wiring ===
+    # === Graph Build ===
     graph.add_node("handle_input", handle_input)
     graph.add_node("rewrite_resume", rewrite_resume)
     graph.add_node("refine_resume", refine_resume)

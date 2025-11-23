@@ -80,3 +80,18 @@ class ResumeFileService:
         result = self.collection.delete_one({"file_id": file_id})
         if result.deleted_count == 0:
             raise HTTPException(status_code=404, detail="Resume file not found")
+
+    def update_file_id(self, old_file_id: str, new_file_id: str):
+        collection = resume_db["resume_files"]
+
+        result = collection.find_one_and_update(
+            {"file_id": old_file_id},
+            {"$set": {"file_id": new_file_id}},
+            return_document=True
+        )
+
+        if not result:
+            raise ValueError("Resume not found")
+
+        # 转换成 ResumeFile 模型
+        return ResumeFile(**_to_dict(result))

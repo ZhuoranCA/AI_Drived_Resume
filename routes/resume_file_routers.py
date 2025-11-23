@@ -61,32 +61,22 @@ def create_file(
 
     return service.create_file(file, file_name,  user_id)
 
-# -----------------------------
-#  Update Resume Content
-# -----------------------------
-@router.put("/{resume_id}")
-def update_resume(
+@router.put("/{resume_id}/file-id")
+def update_file_id(
     resume_id: str,
-    new_content: str = Form(...),
-    current_user: dict = Depends(get_current_user),
+    new_file_id: str = Form(...),
+    current_user: dict = Depends(get_current_user)
 ):
     resume = service.get_file(resume_id)
-
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found.")
 
-    # 权限：必须是本人的 OR 管理员
-    if current_user["role"] != "admin" and resume.user_id != current_user["user_id"]:
-        raise HTTPException(status_code=403, detail="Access denied.")
-
-    updated = service.update_file_content(resume_id, new_content)
+    updated_resume = service.update_file_id(resume_id, new_file_id)
 
     return {
-        "message": "Resume updated successfully",
-        "resume_id": resume_id,
-        "new_content": new_content
+        "message": "File ID updated successfully",
+        "new_file_id": new_file_id
     }
-
 
 # -----------------------------
 #  Delete Resume (权限保护)
