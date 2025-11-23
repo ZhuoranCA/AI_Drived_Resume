@@ -1,8 +1,11 @@
 from datetime import datetime
-from fastapi import HTTPException, status
-from typing import List, Optional
+from fastapi import HTTPException
+from typing import List
 from database.db_connection import resume_db
 from models.resume_file import ResumeFile
+import uuid
+from azure.storage.blob import BlobServiceClient
+import os
 
 
 def _to_dict(doc: dict) -> dict:
@@ -13,14 +16,18 @@ def _to_dict(doc: dict) -> dict:
 
 
 class ResumeFileService:
-    """
-    Service layer for managing ResumeFile records.
-    Handles all database logic (CRUD).
-    """
-
     def __init__(self):
         self.collection = resume_db["resume_files"]
 
+        self.connection_string = os.getenv("AZURE_BLOB_CONNECTION_STRING")
+        self.container_name = os.getenv("AZURE_BLOB_CONTAINER")
+        self.base_url = os.getenv("AZURE_BLOB_BASE_URL")
+
+        if not self.connection_string:
+            raise Exception("AZURE_BLOB_CONNECTION_STRING missing in .env")
+
+        self.blob_service = BlobServiceClient.from_connection_string(self.connection_string)
+        self.container = self.blob_service.get_container_client(self.container_name)
     # ------------------ CRUD ------------------ #
     def list_all_files(self) -> List[dict]:
         files = list(self.collection.find().sort("created_at", -1))
@@ -36,15 +43,38 @@ class ResumeFileService:
             raise HTTPException(status_code=404, detail="Resume file not found")
         return _to_dict(file)
 
-    def create_file(self, file: ResumeFile) -> dict:
-        existing = self.collection.find_one({"file_id": file.file_id})
-        if existing:
-            raise HTTPException(status_code=400, detail="File already exists")
+    def create_file(self, upload_file, file_name: str, user_id: str) -> dict:
+        file_id = f"resume_{uuid.uuid4().hex[:10]}"
 
-        file_data = file.dict()
-        file_data["created_at"] = datetime.utcnow()
-        self.collection.insert_one(file_data)
-        return _to_dict(file_data)
+        try:
+            file_bytes = upload_file.file.read()
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid file upload.")
+
+        blob_name = f"{user_id}/{file_id}.pdf"
+        blob_client = self.container.get_blob_client(blob_name)
+
+        try:
+            blob_client.upload_blob(file_bytes, overwrite=True)
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to upload PDF to Azure Blob: {str(e)}"
+            )
+
+        file_url = blob_client.url
+
+        record = {
+            "file_id": file_id,
+            "user_id": user_id,
+            "file_name": file_name,
+            "file_url": file_url,
+            "created_at": datetime.utcnow()
+        }
+
+        self.collection.insert_one(record)
+
+        return _to_dict(record)
 
     def delete_file(self, file_id: str) -> None:
         result = self.collection.delete_one({"file_id": file_id})

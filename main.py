@@ -1,3 +1,5 @@
+from doctest import debug
+
 from fastapi import FastAPI, Request
 from routes.user_routes import router as user_router
 from routes.resume_routes import router as resume_router
@@ -26,3 +28,7 @@ def root():
 @app.on_event("shutdown")
 def shutdown_event():
     print("Application shutting down, MongoDB connections will close automatically.")
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=8006, reload=True)

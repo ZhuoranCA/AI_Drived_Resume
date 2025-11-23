@@ -45,3 +45,6 @@ class HistorySession(BaseModel):
                 "updated_at": "2025-10-27T13:00:05Z"
             }
         }
+
+class HistorySessionUpdate(BaseModel):
+    title: Optional[str] = None

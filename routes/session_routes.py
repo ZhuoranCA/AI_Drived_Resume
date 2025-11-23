@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, status
 from datetime import datetime
 from typing import List
 from database.db_connection import chat_db
-from models.history_session import HistorySession
+from models.history_session import HistorySession, HistorySessionUpdate
 
 router = APIRouter(prefix="")
 sessions_collection = chat_db["sessions"]
@@ -60,3 +60,26 @@ def delete_session(session_id: str):
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Session not found")
     return {"message": f"Session {session_id} deleted successfully"}
+
+
+@router.patch("/{session_id}/title", response_model=HistorySession)
+def update_session_title(session_id: str, update: HistorySessionUpdate):
+    session = sessions_collection.find_one({"session_id": session_id})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    if update.title is None:
+        raise HTTPException(status_code=400, detail="Title cannot be null")
+
+    sessions_collection.update_one(
+        {"session_id": session_id},
+        {
+            "$set": {
+                "title": update.title,
+                "updated_at": datetime.utcnow()
+            }
+        }
+    )
+
+    updated = sessions_collection.find_one({"session_id": session_id})
+    return session_to_dict(updated)
