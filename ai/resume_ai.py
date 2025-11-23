@@ -34,9 +34,9 @@ def fetch_jd_from_url(url: str) -> str:
         return text
 
 
-def define_graph() -> StateGraph:
+def define_graph(model_name: str = "gpt-4o-mini", temperature: float = 0.6) -> StateGraph:
     graph = StateGraph(state_schema=ResumeState)
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.6)
+    llm = ChatOpenAI(model=model_name, temperature=temperature)
 
     # === Helper: Conversational Reply ===
     def ai_speak(context: str, tone: str = "professional") -> str:

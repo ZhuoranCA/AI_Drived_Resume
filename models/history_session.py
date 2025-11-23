@@ -20,6 +20,7 @@ class HistorySession(BaseModel):
     user_id: Optional[str] = Field(None, description="ID of the user owning this session.")
     title: Optional[str] = Field(None, description="Optional title (can be generated from first user message).")
     messages: List[ChatMessage] = Field(default_factory=list, description="Ordered list of exchanged messages.")
+    model: Optional[str] = Field("gpt-4o-mini", description="The AI model used for this session.")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
