@@ -1,16 +1,16 @@
-from doctest import debug
 import logging
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-from fastapi import FastAPI, Request
 from routes.user_routes import router as user_router
 from routes.resume_routes import router as resume_router
 from routes.resume_ai_routers import router as resume_ai_router
 from routes.session_routes import router as session_routes
 from routes.resume_file_routers import router as resume_file
-from services.rabbitmq_listener_service import start_listening,stop_listening
+
+from services.rabbitmq_listener_service import start_listening, stop_listening
 import threading
 
-# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -21,6 +21,16 @@ app = FastAPI(
     title="AI Resume Enhancer API",
     version="1.0.0",
     description="FastAPI backend for user registration and resume upload"
+)
+
+origins = ["*"]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(user_router, prefix="/api/users", tags=["Users"])
@@ -34,27 +44,27 @@ app.include_router(resume_file, prefix="/api/resume-files", tags=["Resume Files"
 def root():
     return {"message": "API is running successfully!"}
 
+
 @app.on_event("startup")
 async def startup_event():
     logger.info("Application starting up...")
 
     def run_listener():
-        start_listening()  # 直接调用，而不是 rabbitmq_listener_service.start()
+        start_listening()
 
     threading.Thread(target=run_listener, daemon=True).start()
     logger.info("RabbitMQ listener started in background thread")
 
+
 @app.on_event("shutdown")
 async def shutdown_event():
-    """Shutdown event: Cleanup resources"""
     logger.info("Application shutting down...")
     try:
-        stop_listening()  # <-- 此处调用刚才写好的函数
+        stop_listening()
         logger.info("RabbitMQ listener stopped successfully")
     except Exception as e:
         logger.error(f"Error stopping RabbitMQ listener: {e}", exc_info=True)
-    
-    logger.info("MongoDB connections will close automatically.")
+
 
 if __name__ == "__main__":
     import uvicorn
