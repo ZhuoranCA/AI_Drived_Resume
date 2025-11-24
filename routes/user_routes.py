@@ -49,8 +49,8 @@ def login_user(user: User):
     return {"access_token": token, "token_type": "bearer", "user_id": str(found["_id"])}
 
 
-# @router.get("/", dependencies=[Depends(require_role("admin"))])
-@router.get("/")
+@router.get("/", dependencies=[Depends(require_role("admin"))])
+# @router.get("/")
 def get_all_users():
     users_col = user_db["users"]
     users = list(users_col.find({}, {"password_hash": 0}))
