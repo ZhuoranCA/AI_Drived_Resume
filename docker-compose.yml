@@ -4,4 +4,11 @@ services:
     container_name: resume-backend
     ports:
       - "8006:8006"
+    networks:
+      - resume-app-network
     restart: always
+
+networks:
+  resume-app-network:
+    external: true
+    name: resume-app-network
