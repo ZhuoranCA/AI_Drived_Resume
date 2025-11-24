@@ -6,6 +6,7 @@ from langchain_core.messages import HumanMessage
 from ai.resume_ai import define_graph
 from database.db_connection import chat_db
 from models.history_session import ChatMessage, HistorySession
+from utils.rabbitmq_handler import send_event_to_rabbitmq
 from dotenv import load_dotenv
 import re
 
@@ -126,11 +127,14 @@ def chat(msg: Message):
         }
     )
 
-    # ⬇⬇⬇ 这里新增：返回当前正在使用的模型
+    # Send CHAT event to RabbitMQ
+    event_detail = f"User {user_id} sent a chat message in session {session_id}"
+    send_event_to_rabbitmq(user_id, "CHAT", event_detail)
+    
     return {
         "reply": reply,
         "resume_md": cleaned_resume_md,
-        "model": model_name  # 新增字段
+        "model": model_name
     }
 
 

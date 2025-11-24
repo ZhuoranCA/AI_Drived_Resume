@@ -1,0 +1,7 @@
+services:
+  api:
+    build: .
+    container_name: resume-backend
+    ports:
+      - "8006:8006"
+    restart: always

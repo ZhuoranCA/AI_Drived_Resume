@@ -6,6 +6,7 @@ from datetime import datetime
 from database.db_connection import user_db
 from models.user_model import User, create_user, serialize_user
 from utils.auth_handler import create_access_token, get_current_user, require_role
+from utils.rabbitmq_handler import send_event_to_rabbitmq
 
 router = APIRouter(prefix="", tags=["Users"])
 
@@ -29,7 +30,14 @@ def register_user(user: User):
 
     result = users_col.insert_one(new_user)
     inserted = users_col.find_one({"_id": result.inserted_id})
-    return serialize_user(inserted)
+    serialized = serialize_user(inserted)
+    
+    # Send REGISTER event to RabbitMQ
+    user_id = str(inserted["_id"])
+    event_detail = f"{user.email} register"
+    send_event_to_rabbitmq(user_id, "REGISTER", event_detail)
+    
+    return serialized
 
 
 @router.post("/login")
