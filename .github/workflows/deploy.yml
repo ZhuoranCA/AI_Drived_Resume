@@ -1,0 +1,30 @@
+name: Deploy to Ubuntu Server
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.5.4
+        with:
+          ssh-private-key: ${{ secrets.SERVER_SSH_KEY }}
+
+      - name: Deploy on Remote Server
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
+            echo 'Pulling latest code...' &&
+            cd /home/bochao/AI_Drived_Resume &&
+            git fetch --all &&
+            git reset --hard origin/master &&
+            echo 'Rebuilding docker compose...' &&
+            docker compose down &&
+            docker compose pull &&
+            docker compose up -d --build &&
+            echo 'Deployment completed'
+          "
