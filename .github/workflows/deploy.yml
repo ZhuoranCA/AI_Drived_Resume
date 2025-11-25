@@ -1,16 +1,16 @@
-name: Deploy to Ubuntu Server (Password Login)
+name: Deploy to Ubuntu Server
 
 on:
   push:
     branches:
-      - main
+      - master
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Run commands on remote Ubuntu server via password
+      - name: Deploy to Remote Server via Password SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -18,13 +18,13 @@ jobs:
           password: ${{ secrets.SERVER_PASS }}
           script: |
             echo "Pulling latest code..."
-            cd /home/bochao/AI_Drived_Resume
+            cd /home/bochao/AI_Drived_Resume || exit 1
             git fetch --all
-            git reset --hard origin/master
+            git reset --hard origin/main
 
-            echo "Restarting Docker..."
-            docker compose down
-            docker compose pull
-            docker compose up -d --build
+            echo "Restarting Docker Compose..."
+            docker-compose down || true
+            docker-compose pull || true
+            docker-compose up -d --build
 
             echo "Deployment completed."
