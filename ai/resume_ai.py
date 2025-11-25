@@ -181,6 +181,13 @@ Optimize the following resume based on the job description.
 ### Job Description
 {state['jd_md']}
 
+###
+- Extract all technical skills, tools, frameworks, languages, cloud platforms, databases, and methodologies mentioned in the job description.
+- If any of these skills are missing in the resume, add them to the Skills section in a natural and truthful way.
+- Do NOT invent experience; only add skills that match the applicant’s existing background or can be reasonably inferred.
+- If resume already contains a Skills section, expand it. Otherwise, create a concise Skills section.
+- Ensure the resume remains consistent and believable while maximizing keyword alignment to pass ATS filters.
+
 Output ONLY the improved resume in Markdown.
 """
         optimized = llm.invoke([HumanMessage(content=prompt)]).content.strip()
