@@ -1,4 +1,4 @@
-name: Deploy to Ubuntu Server
+name: Deploy to Ubuntu Server (Password Login)
 
 on:
   push:
@@ -10,21 +10,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.5.4
+      - name: Run commands on remote Ubuntu server via password
+        uses: appleboy/ssh-action@v1.0.3
         with:
-          ssh-private-key: ${{ secrets.SERVER_SSH_KEY }}
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASS }}
+          script: |
+            echo "Pulling latest code..."
+            cd /home/bochao/AI_Drived_Resume
+            git fetch --all
+            git reset --hard origin/master
 
-      - name: Deploy on Remote Server
-        run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
-            echo 'Pulling latest code...' &&
-            cd /home/bochao/AI_Drived_Resume &&
-            git fetch --all &&
-            git reset --hard origin/master &&
-            echo 'Rebuilding docker compose...' &&
-            docker compose down &&
-            docker compose pull &&
-            docker compose up -d --build &&
-            echo 'Deployment completed'
-          "
+            echo "Restarting Docker..."
+            docker compose down
+            docker compose pull
+            docker compose up -d --build
+
+            echo "Deployment completed."
