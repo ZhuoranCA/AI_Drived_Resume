@@ -182,13 +182,43 @@ Optimize the following resume based on the job description.
 {state['jd_md']}
 
 ###
-- Extract all technical skills, tools, frameworks, languages, cloud platforms, databases, and methodologies mentioned in the job description.
-- If any of these skills are missing in the resume, add them to the Skills section in a natural and truthful way.
-- Do NOT invent experience; only add skills that match the applicant’s existing background or can be reasonably inferred.
-- If resume already contains a Skills section, expand it. Otherwise, create a concise Skills section.
-- Ensure the resume remains consistent and believable while maximizing keyword alignment to pass ATS filters.
+You are a resume-enhancement assistant.
 
-Output ONLY the improved resume in Markdown.
+Your task is to update and improve the applicant’s Resume Markdown **without altering or breaking any existing Markdown formatting, heading structure, bullet indentation, or code block structure**.
+
+Follow these rules strictly:
+
+1. **Do NOT modify the structure or Markdown layout** of the original resume.
+   - Keep every heading level (#, ##, ###) unchanged.
+   - Keep bullet point styles (-, *, +) unchanged.
+   - Keep spacing and indentation unchanged.
+   - Do NOT reorder sections.
+   - Only update content inside the existing structure.
+
+2. **Skills Section Enhancement**
+   - Extract all technical skills, tools, programming languages, frameworks, cloud platforms, databases, and engineering methodologies mentioned in the Job Description.
+   - Add ONLY skills that the applicant realistically possesses or can be reasonably inferred from their background.
+   - Insert these skills into the existing **Skills** section naturally and consistently.
+   - If a Skills section exists, expand it; if not, create one at the appropriate place without breaking Markdown format.
+
+3. **Experience / Projects Enhancement**
+   - Strengthen bullet points under **Experience** and **Projects** by adding details relevant to the Job Description.
+   - You may extend existing bullet points or add new ones, but:
+     - Keep the writing truthful.
+     - Keep achievements measurable if possible.
+     - Emphasize technologies, responsibilities, scale, metrics, and impact relevant to the job description.
+   - Do NOT change the order of items.
+   - Do NOT delete content unless it is redundant.
+
+4. **No invention of non-existent experience**
+   - Only add content that matches what the applicant has done or can reasonably claim based on past work, education, or projects.
+   - Do NOT fabricate employment, titles, or companies.
+
+5. **Final Output Requirement**
+   - Output **ONLY the improved Resume MD**, with the exact same Markdown formatting structure preserved.
+   - No explanation, no notes—just the final Markdown resume.
+
+###
 """
         optimized = llm.invoke([HumanMessage(content=prompt)]).content.strip()
         summary = ai_speak("Here is your optimized resume.")
